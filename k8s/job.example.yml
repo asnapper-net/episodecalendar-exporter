@@ -27,7 +27,7 @@ spec:
           name: epcal-export
         spec:
           containers:
-            - image: asnapper/epcal:latest
+            - image: asnapper/epcal:1.0.0
               resources:
                 limits:
                   cpu: 1

@@ -3,3 +3,4 @@ db.json
 user-data.*
 start.sh
 *.log
+k8s/job.yml
