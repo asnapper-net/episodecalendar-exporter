@@ -89,43 +89,56 @@ const login = async (db, user) => {
   return sessionCookie
 }
 
+
+const exportUrls = [
+  'https://episodecalendar.com/en/export_data/json.json',
+  'https://episodecalendar.com/en/export_data/csv.csv',
+  'https://episodecalendar.com/en/export_data/xml.xml'
+]
 /**
  * Download the user data json given a session cookie for authentication
  */
 const downloadUserData = async sessionCookie => {
   debugDown('requesting data')
-  const res = await fetch('https://episodecalendar.com/en/export_data/json.json', {
-    headers: {
-      Cookie: stringifyCookie(sessionCookie),
-    },
-  })
 
-  // TODO: proper error handling
-  if (res.status !== 200) {
-    throw new Error(`Unexpected response code ${res.status}`)
-  }
+  await Promise.all(exportUrls.map(async url => {
+    debugDown('getting ' + url)
+    const res = await fetch(url, {
+      headers: {
+        Cookie: stringifyCookie(sessionCookie),
+      },
+    })
+    // TODO: proper error handling
+    if (res.status !== 200) {
+      throw new Error(`Unexpected response code ${res.status} while requesting ${url}`)
+    }
+  
+    debugDown(`connection established (${res.status}), downloading data`)
 
-  debugDown(`connection established (${res.status}), downloading data`)
+    const fileExt = url.substr(url.lastIndexOf('.'))
+  
+    const file = fs.createWriteStream('user-data' + fileExt)
+  
+    const progress = progressStream({
+      length: res.size,
+      time: 100,
+    })
+  
+    progress.on('progress', p => {
+      debugDown(
+        `download progress: ${filesize(p.transferred)}/?? @ ${filesize(
+          p.speed,
+        )}/s`,
+      )
+    })
 
-  const file = fs.createWriteStream('user-data.json')
+    // TODO: streamed json formatting
+    await streamCompletion(res.body.pipe(progress).pipe(file))
 
-  const progress = progressStream({
-    length: res.size,
-    time: 100,
-  })
+    debugDown(`downloading ${url} completed`)
+  }))
 
-  progress.on('progress', p => {
-    debugDown(
-      `download progress: ${filesize(p.transferred)}/?? @ ${filesize(
-        p.speed,
-      )}/s`,
-    )
-  })
-
-  // TODO: streamed json formatting
-  await streamCompletion(res.body.pipe(progress).pipe(file))
-
-  debugDown('download complete')
+  debugDown('all downloads complete')
 }
 
 /**
