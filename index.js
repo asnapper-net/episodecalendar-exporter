@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer')
 
 const fs = require('fs')
+const path = require('path')
 const fetch = require('node-fetch')
 const filesize = require('filesize')
 const progressStream = require('progress-stream')
@@ -40,7 +41,7 @@ const stringifyCookie = ({ name, value }) => `${name}=${value}`
 const login = async (db, user) => {
   // Launch browser
   debugLogin('launching browser')
-  const browser = await puppeteer.launch({ headless: true })
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] })
 
   // Open new page
   debugLogin('opening new page')
@@ -113,24 +114,27 @@ const downloadUserData = async sessionCookie => {
       throw new Error(`Unexpected response code ${res.status} while requesting ${url}`)
     }
   
-    debugDown(`connection established (${res.status}), downloading data`)
+    debugDown(`connection established to ${url} (${res.status}), downloading data`)
 
+    const outputDirectory = process.env.EPCAL_OUT_DIR || './'
     const fileExt = url.substr(url.lastIndexOf('.'))
+    const filePath = path.join(outputDirectory, 'user-data' + fileExt)
   
-    const file = fs.createWriteStream('user-data' + fileExt)
+    debugDown(`writing to ${filePath}`)
+
+    if (!fs.existsSync(outputDirectory)) {
+      debugDown(`creating output directory ${outputDirectory}`)
+      fs.mkdirSync(outputDirectory, { recursive: true })
+    }
+
+    const file = fs.createWriteStream(filePath)
   
     const progress = progressStream({
       length: res.size,
       time: 100,
     })
   
-    progress.on('progress', p => {
-      debugDown(
-        `download progress: ${filesize(p.transferred)}/?? @ ${filesize(
-          p.speed,
-        )}/s`,
-      )
-    })
+    progress.on('progress', p => debugDown(`download progress ${url}: ${filesize(p.transferred)} @ ${filesize(p.speed)}/s`))
 
     // TODO: streamed json formatting
     await streamCompletion(res.body.pipe(progress).pipe(file))
@@ -146,10 +150,16 @@ const downloadUserData = async sessionCookie => {
  */
 const main = async () => {
   debugEpcal('reading user from env')
+
+  if (!process.env.EPCAL_EMAIL || !(process.env.EPCAL_PASS_PLAIN || process.env.EPCAL_PASS)) {
+    debugEpcal('missing or incomplete credentials provided')
+    process.exit(-1)
+  }
+
   const user = {
     email: process.env.EPCAL_EMAIL,
     // Obligatory note that base64 is not a secure encoding for password storage
-    password: new Buffer(process.env.EPCAL_PASS, 'base64').toString('utf8'),
+    password: process.env.EPCAL_PASS_PLAIN || new Buffer.from(process.env.EPCAL_PASS || '', 'base64').toString('utf8'),
   }
 
   debugEpcal('connecting to db')
