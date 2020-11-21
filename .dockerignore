@@ -1,0 +1,5 @@
+node_modules
+db.json
+user-data.*
+start.sh
+*.log
